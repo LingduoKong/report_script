@@ -1,6 +1,5 @@
 import gen
 
-
 def main():
 
     path = 'all_new_test.csv'
