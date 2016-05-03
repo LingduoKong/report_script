@@ -4,15 +4,13 @@ from bs4 import BeautifulSoup
 
 class TestCaseSuite(object):
     """docstring for TestCaseSuite"""
-    test_cases = {}
-    url = None
 
     def __init__(self, name):
         self.name = name
+        self.test_cases = {}
+        self.url = None
 
     def fetch_test_cases(self):
-        if len(self.test_cases) > 0 or self.url is None:
-            return self.test_cases
 
         page = urllib.urlopen(self.url).read()
         soup = BeautifulSoup(page, 'html.parser')
@@ -23,9 +21,11 @@ class TestCaseSuite(object):
         sub_soup = BeautifulSoup(sub_page, 'html.parser')
         tables = sub_soup.find_all("table", class_="info")
 
+        if tables is None or len(tables) < 2:
+            return self.test_cases
+
         for tr in tables[1].find_all("tr"):
             name = tr.find_all("td")[0].a.text
-            print(name)
             prev_status = ''
             cur_status = tr.find_all("td")[1].span.text
             test_case = TestCase(name, prev_status, cur_status)
@@ -45,24 +45,36 @@ class TestCase(object):
 
 
 def read_csv_file(path):
+
+    if path is None or len(path) == 0:
+        return {}
+
     old_csv = open(path, 'r+')
     suites_table = {}
 
     suite = None
     for line in old_csv:
         elements = line.split(',')
+
         if len(elements[0].strip()) > 0:
             name = elements[0].strip()
             suite = TestCaseSuite(name)
             suites_table[name] = suite
+        else:
+            if len(elements) > 1:
+                case_name = elements[1]
 
-        case_name = elements[1]
-        prev_status = elements[2]
-        cur_staus = elements[3]
-        case = TestCase(case_name, prev_status, cur_staus)
-        if len(elements) > 4:
-            case.comment = elements[4]
-        suite.test_cases[case_name] = case
+            if len(elements) > 2:
+                prev_status = elements[2]
+
+            if len(elements) > 3:
+                cur_status = elements[3]
+
+            if len(elements) > 4:
+                case.comment = elements[4]
+
+            case = TestCase(case_name, prev_status, cur_status)
+            suite.test_cases[case_name] = case
 
     old_csv.close()
     return suites_table
@@ -71,13 +83,13 @@ def read_csv_file(path):
 def get_csv_string(suites_table):
     content = ""
     for suite_name, suite in suites_table.iteritems():
-        content += suite_name
+        content += suite_name.strip() + '\n'
         for case_name, case in suite.test_cases.iteritems():
-            content += "," + case_name
-            content += "," + case.prev_status
-            content += "," + case.cur_status
-            content += "," + case.comment
-        content += "\n"
+            content += "," + case_name.strip()
+            content += "," + case.prev_status.strip()
+            content += "," + case.cur_status.strip()
+            content += "," + case.comment.strip()
+            content += "\n"
     return content
 
 
@@ -98,4 +110,23 @@ def get_new_result(url):
         new_suite_table[suite_name] = suite_obj
 
     return new_suite_table
+
+
+def update_new_result(new_suite_table, old_suite_table):
+
+    for name, old_suite in old_suite_table.iteritems():
+        if name not in new_suite_table:
+            new_suite_table[name] = old_suite
+        else:
+            new_suite = new_suite_table[name]
+            for case_name, case in old_suite.test_cases.iteritems():
+                if case_name not in new_suite.test_cases:
+                    new_suite.test_cases[case_name] = case
+                else:
+                    if case.prev_status.strip().upper() == "PASS" or case.cur_status.strip().upper() == "PASS":
+                        new_suite.test_cases[case_name].prev_status = "PASS"
+                    else:
+                        new_suite.test_cases[case_name].prev_status = case.cur_status
+
+    return
 
